@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#075e54">
+<title>WhatsApp Leads Manager</title>
+<style>
+:root{--green:#075e54;--bg:#f3f6f5;--card:#fff;--text:#172321;--muted:#687875;--line:#dfe7e4}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{background:var(--green);color:#fff;padding:22px 18px 18px}header h1{font-size:22px;margin:0 0 5px}header p{margin:0;color:#d7eee9;font-size:13px}
+main{max-width:950px;margin:auto;padding:14px;display:grid;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 2px 8px #102a2410}
+h2{font-size:17px;margin:0 0 12px}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:10px;padding:12px 14px;background:var(--green);color:#fff;font-weight:650;cursor:pointer}.btn.secondary{background:#e7f1ee;color:var(--green)}.btn:disabled{opacity:.45}
+input,select{border:1px solid var(--line);border-radius:9px;padding:10px;background:#fff;color:var(--text);max-width:100%}.hint{font-size:12px;color:var(--muted);line-height:1.5}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#edf5f2;border-radius:12px;padding:12px}.stat small{display:block;color:var(--muted)}.stat strong{font-size:23px}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px;min-width:780px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:10px 8px;vertical-align:top}th{background:#f5f8f7;position:sticky;top:0}.tag{display:inline-block;background:#e7f1ee;color:#075e54;padding:3px 7px;border-radius:99px;font-size:11px}
+#status{font-size:13px;color:var(--muted);margin-top:9px}.warning{background:#fff8e8;border:1px solid #f0dfb6;border-radius:10px;padding:10px;font-size:12px;line-height:1.5}
+@media(max-width:520px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:span 2}header h1{font-size:20px}}
+</style>
+</head>
+<body>
+<header><h1>WhatsApp Leads Manager</h1><p>Offline • No WhatsApp API • Excel-ready export</p></header>
+<main>
+<section class="card">
+<h2>1. Import WhatsApp chat export</h2>
+<div class="row"><input id="file" type="file" accept=".txt,text/plain"><button class="btn" id="importBtn">Import & Categorize</button></div>
+<p class="hint">In WhatsApp, open a chat → ⋮ → More → Export chat → Without media. Select the exported .txt file here. For multiple chats, import each file separately.</p>
+<div class="warning">This app does not connect to or read WhatsApp automatically. It only processes files you choose. The chat export may not include every contact number or all messages, depending on the export format.</div>
+<div id="status">No file imported yet.</div>
+</section>
+<section class="card">
+<h2>2. Lead overview</h2>
+<div class="stats"><div class="stat"><small>Unique numbers</small><strong id="total">0</strong></div><div class="stat"><small>Known categories</small><strong id="known">0</strong></div><div class="stat"><small>Unknown</small><strong id="unknown">0</strong></div></div>
+<div class="row" style="margin-top:13px"><select id="filterCat"><option value="">All categories</option></select><input id="search" placeholder="Search number, name, category…"><button class="btn secondary" id="exportBtn" disabled>Download Excel CSV</button></div>
+<p class="hint">CSV opens in Excel. Dates are based on messages detected in the imported text. Ad source is only assigned if the text contains a recognizable campaign/ad name or marker; otherwise it stays Unknown.</p>
+</section>
+<section class="card">
+<h2>3. Leads</h2>
+<div class="tablewrap"><table><thead><tr><th>Phone / ID</th><th>Name / Chat</th><th>Category</th><th>First message</th><th>Last message</th><th>Messages</th><th>Ad source</th></tr></thead><tbody id="tbody"><tr><td colspan="7" class="hint">Import a WhatsApp chat export to see leads.</td></tr></tbody></table></div>
+</section>
+<section class="card">
+<h2>Category rules</h2>
+<p class="hint">Offline categorization uses free keyword rules, not a paid AI model. You can change these keywords in the app source. If no rule matches, the lead is assigned Unknown.</p>
+<div class="hint"><b>Examples:</b> course, admission, digital marketing, graphic design, website, Shopify, WordPress, price, fee, job, internship.</div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id); let leads=[];
+const rules=[
+ {name:"IT Course",words:["course","admission","admit","training","class","classes","student","کورس","داخلہ","ٹریننگ"]},
+ {name:"Digital Marketing",words:["digital marketing","social media","facebook ads","meta ads","marketing","ads","advertising"]},
+ {name:"Graphic Designing",words:["graphic design","graphics","photoshop","illustrator","canva"]},
+ {name:"Web Development",words:["website","web development","wordpress","shopify","e-commerce","ecommerce","developer"]},
+ {name:"Video Editing / AI Content",words:["video editing","capcut","filmora","ai video","content creation","editing"]},
+ {name:"Job / Internship",words:["job","jobs","career","internship","vacancy","نوکری","جاب"]},
+ {name:"Fees / Pricing",words:["fee","fees","price","charges","cost","فیس","قیمت"]}
+];
+function categoryFor(text){let t=text.toLowerCase();let best="Unknown",score=0;for(const r of rules){let s=r.words.reduce((n,w)=>n+(t.includes(w)?1:0),0);if(s>score){score=s;best=r.name}}return best}
+function parseLine(line){
+ // Common WhatsApp Android export: 18/10/2026, 7:42 pm - Name: message
+ let m=line.match(/^(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\s+-\s+([^:]+?):\s?(.*)$/);
+ if(m)return {date:m[1],time:m[2],sender:m[3].trim(),message:m[4]||""};
+ // iOS-ish: [18/10/2026, 7:42:00 PM] Name: message
+ m=line.match(/^\[(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),?\s+([^\]]+)\]\s+([^:]+?):\s?(.*)$/);
+ if(m)return {date:m[1],time:m[2],sender:m[3].trim(),message:m[4]||""};
+ return null;
+}
+function normalizeDate(s){let m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);if(!m)return s;let y=m[3].length===2?"20"+m[3]:m[3];return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`}
+function phoneFrom(s){let matches=s.match(/(?:\+?\d[\d\s().-]{7,}\d)/g)||[];for(let x of matches){let d=x.replace(/\D/g,"");if(d.length>=9&&d.length<=15)return "+"+d}return ""}
+function campaignFrom(text){let m=text.match(/(?:campaign|ad source|ad name|campaign id)\s*[:=#-]\s*([^\n,;]+)/i);return m?m[1].trim():"Unknown"}
+function importText(text,filename){
+ let lines=text.replace(/^\uFEFF/,"").split(/\r?\n/), current=null, records=[];
+ for(let line of lines){let p=parseLine(line);if(p){current={...p,full:line};records.push(current)}else if(current){current.message+="\n"+line;current.full+="\n"+line}}
+ if(!records.length){$("status").textContent="Could not recognize dates/messages in this export format. Try a WhatsApp .txt export without media.";return}
+ let by=new Map(), fallback=filename.replace(/\.txt$/i,"");
+ for(const r of records){
+  let phone=phoneFrom(r.sender)||phoneFrom(r.message);
+  // exported one-to-one chat files often contain the chat participant in the filename rather than a number
+  let id=phone||("CHAT:"+fallback);
+  if(!by.has(id))by.set(id,{phone:phone||"Not found",name:phone?r.sender:fallback,category:"Unknown",firstDate:normalizeDate(r.date),lastDate:normalizeDate(r.date),messages:0,adSource:"Unknown",allText:""});
+  let l=by.get(id);l.messages++;l.lastDate=normalizeDate(r.date);l.allText+=" "+r.message;
+  if(l.firstDate==="")l.firstDate=normalizeDate(r.date);
+  let c=categoryFor(l.allText);if(c!=="Unknown")l.category=c;
+  let ad=campaignFrom(r.message);if(ad!=="Unknown")l.adSource=ad;
+ }
+ // Also detect number/name from message text for common incoming chat lines, but do not guess sender identity.
+ leads=[...by.values()].map(x=>({...x,category:categoryFor(x.allText)}));
+ render();$("status").textContent=`Imported ${records.length} message entries from ${filename}. ${leads.length} lead/chat records created.`;
+}
+function render(){
+ let cats=[...new Set(leads.map(l=>l.category))].sort();let old=$("filterCat").value;
+ $("filterCat").innerHTML='<option value="">All categories</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join("");if(cats.includes(old))$("filterCat").value=old;
+ $("total").textContent=leads.length;$("known").textContent=leads.filter(l=>l.category!=="Unknown").length;$("unknown").textContent=leads.filter(l=>l.category==="Unknown").length;
+ let q=$("search").value.toLowerCase(),f=$("filterCat").value;
+ let visible=leads.filter(l=>(!f||l.category===f)&&[l.phone,l.name,l.category,l.adSource].join(" ").toLowerCase().includes(q));
+ $("tbody").innerHTML=visible.length?visible.map(l=>`<tr><td>${esc(l.phone)}</td><td>${esc(l.name)}</td><td><span class="tag">${esc(l.category)}</span></td><td>${esc(l.firstDate)}</td><td>${esc(l.lastDate)}</td><td>${l.messages}</td><td>${esc(l.adSource)}</td></tr>`).join(""):'<tr><td colspan="7">No matching leads.</td></tr>';
+ $("exportBtn").disabled=!leads.length;
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+$("importBtn").onclick=async()=>{let f=$("file").files[0];if(!f){$("status").textContent="Please select a WhatsApp .txt export first.";return}try{importText(await f.text(),f.name)}catch(e){$("status").textContent="Could not read this file."}};
+$("search").oninput=render;$("filterCat").onchange=render;
+$("exportBtn").onclick=()=>{let rows=[["Phone","Chat/Name","Category","First Message Date","Last Message Date","Message Count","Ad Source"],...leads.map(l=>[l.phone,l.name,l.category,l.firstDate,l.lastDate,l.messages,l.adSource])];let csv="\uFEFF"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"}));a.download="whatsapp-leads.csv";a.click();URL.revokeObjectURL(a.href)};
+</script>
+</body></html>
